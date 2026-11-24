@@ -1,6 +1,13 @@
 import requests
 import json
 
+import logging
+logging.basicConfig(
+     filename="logs/weather-pipeline.log",
+     level=logging.INFO,
+     format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 
 locations = {
     "Toronto": {
@@ -33,7 +40,7 @@ def api_call(latitude, longitude, timezone):
         print("success")
         return r.json()
     except requests.exceptions.RequestException as e:
-        print(f"API request Failed : {e}")
+        logging.error("API request failed: %s", e)
         return None
 
 record1 = {
@@ -55,14 +62,17 @@ def validate_weather(record):
          return False
 
 if __name__=="__main__":
-    print(validate_weather(record2))
     weather_records=[]
     raw_weather_records=[]
+    valid_records=[]
+    invalid_records=[]
+    logging.info("Weather extraction starting")
     for location in locations:
         latitude=locations[location]["latitude"]
         longitude=locations[location]["longitude"]
         timezone=locations[location]["timezone"]
         data=api_call(latitude,longitude,timezone)
+    
         if data is not None:
             weather_record={}
             raw_weather_records.append(data)
@@ -73,15 +83,23 @@ if __name__=="__main__":
             weather_record["temperature_min"] = data['daily']['temperature_2m_min'][0]
             weather_record["precipitation"] = data['daily']['precipitation_sum'][0]
             weather_record["wind_speed_max"] = data['daily']['wind_speed_10m_max'][0]
+
             weather_records.append(weather_record)
 
-    
-    # with open("data/raw/weather.json","w") as file:
-    #     json.dump(data,file,indent= 4)
+    logging.info("Weather extraction completed")
     with open("data/processed/weather.json","w") as file:
         json.dump(weather_records,file,indent=4)
     with open("data/raw/weather.json","w") as file:
                 json.dump(raw_weather_records,file,indent=4)
-    # {'latitude': 43.646603, 'longitude': -79.38272, 'generationtime_ms': 0.09882450103759766, 'utc_offset_seconds': -18000, 'timezone': 'America/Toronto', 'timezone_abbreviation': 'GMT-5', 'elevation': 99.0,
-    #   'daily_units': {'time': 'iso8601', 'temperature_2m_max': '°C', 'temperature_2m_min': '°C', 'precipitation_sum': 'mm', 'wind_speed_10m_max': 'km/h'}, 
-    #   'daily': {'time': ['2026-11-24'], 'temperature_2m_max': [2.7], 'temperature_2m_min': [-3.8], 'precipitation_sum': [0.0], 'wind_speed_10m_max': [14.5]}}
+    for weather_record in weather_records:
+        if validate_weather(weather_record):
+            valid_records.append(weather_record)
+        else:
+            invalid_records.append(weather_record)
+
+    with open("data/processed/invalid_weather.json","w") as file:
+          json.dump(invalid_records,file, indent=4)
+
+    logging.info("Valid records = %s",len(valid_records))
+    logging.info("Invalid records = %s",len(invalid_records))
+    
